@@ -1,9 +1,120 @@
 # Проект 3
 
-## Этап 0. Backfilling.
+Будет два DAG-а:
+- один на backfilling - `etl_backfilling.py`,
+- второй на increment-ы - `etl_increment.py`.
+
+Первый запускаем вручную: `start_date` ставим на день до якорной даты
+(datetime.today() - timedelta(days=9)), `end_date` - на якорную дату
+(datetime.today() - timedelta(days=8)), и запускаем кнопкой в UI.
+И ставим `schedule_interval` в `'@once'`.
+
+Task-и первого DAG-а сохраняют `report_id` в Variable `etl_report_id`, а `end_date` - в Variable `etl_backfill_end_date`.
+
+Второму DAG-у выставляем `start_date` в то, что видим в Variable `etl_backfill_date_end` (или в datetime.today() - timedelta(days=8)),
+а `end_date` в эту дату + 7 (или datetime.today() - timedelta(days=1)).
+Ему же `schedule_interval` выставляем в `'@daily'`, и `catchup` в `True`.
+
+# Этап 0. Backfilling.
+
+## 0.1. Разворачиваем контейнер
+
+```bash
+docker run -d -p 3000:3000 -p 15432:5432 -e AIRFLOW__CORE__LOAD_EXAMPLES=False --name=de-project-sprint-3-server sindb/project-sprint-3:latest
+```
 
 
-### 0.1. Разворачиваем контейнер, бэкапим бд de (схемы staging и mart).
+## 0.2. ФС
+
+### Заходим в контейнер
+
+```bash
+sudo docker ps -a
+
+$ sudo docker ps -a
+CONTAINER ID IMAGE ...
+bbc29f68b8bd   sindb/project-sprint-3:latest ...
+
+$ sudo docker exec -it bbc29f68b8bd bash
+root@bbc29f68b8bd:/agent# pwd
+/agent
+```
+
+### создать директории в контейнере
+
+- `/file_staging`
+- `/migrations`
+
+```bash
+root@bbc29f68b8bd:/agent# mkdir /file_staging
+root@bbc29f68b8bd:/agent# mkdir /migrations
+root@bbc29f68b8bd:/agent#
+```
+
+### в `/migrations` копируем sql из соотв. папки проекта
+
+```bash
+# например в контейнер bbc29f68b8bd может быть так:
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/migrations bbc29f68b8bd:/
+```
+
+## копируем DAG-файл в директорию дял даг-ов Айрфлоу
+
+- сначала первый,
+- после его отработки - правим (`start_date`) второй и только тогда его
+
+## 0.3. БД
+
+### Коннект
+
+```bash
+psql postgresql://jovyan:jovyan@127.0.0.1:15432/de
+```
+
+### Сразу сделаем миграцию схемы для таблицы staging.user_order_log
+
+```sql
+...
+```
+
+## 0.4. Airflow
+
+### Заходим в UI Airflow
+
+```
+http://localhost:3000/airflow/
+
+- AirflowAdmin
+- airflow_pass
+```
+
+### Заводим переменные (Variable)
+
+- `etl_task_id`
+- `etl_report_id`
+- `etl_backfill_end_date`
+
+### Заводим Connections
+
+- `create_files_api` (http)
+    - Host: `https://d5dg1j9kt695d30blp03.apigw.yandexcloud.net`
+- `pg_connection` (postgres)
+    - Host: `localhost`
+    - Schema: `de`
+
+    ```
+    (In Airflow a schema refers to the database name to which a connection is being made.)
+    ```
+
+    - Login: `jovyan`
+    - Password: `jovyan`
+    - Port: `5432`
+
+
+# Приложение А. Backfilling по первоначальному (неудачному) ТЗ и контейнеру на Проект. Сам себе на память оставил (он вполне рабочий на той версии образа).
+
+
+## А.1. Разворачиваем контейнер, бэкапим бд de (схемы staging и mart).
 
 ```
 sudo docker run -d -p 3000:3000 -p 15432:5432 --name=de-project-sprint-3-server sindb/project-sprint-3:latest
@@ -54,7 +165,7 @@ ALTER TABLE mart.d_item ALTER COLUMN category_id DROP NOT NULL;
 Далее будем восстанавливаться отсюда на фазе `backfilling`.
 
 
-### 0.2. Подготавливаем DAG на основе того, что делалось в уроках спринта ("сквозной кейз")
+## А.2. Подготавливаем DAG на основе того, что делалось в уроках спринта ("сквозной кейз")
 
 0. Креденшлы в Airflow (http://localhost:3000/airflow/):
     - `AirflowAdmin`
@@ -108,7 +219,7 @@ ALTER TABLE mart.d_item ALTER COLUMN category_id DROP NOT NULL;
 
 4. DAG-файл помещаем в 
 
-   - `/src/DAG/etl_backfilling.py` (в контейнере - в `/lessons/dags/etl_backfilling.py`)
+   - `/src/DAG/_etl_backfilling_old.py` (в контейнере - в `/lessons/dags/etl_backfilling_old.py`)
 
 
 ### Описание
