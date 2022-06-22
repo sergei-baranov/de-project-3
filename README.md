@@ -24,7 +24,80 @@ docker run -d -p 3000:3000 -p 15432:5432 -e AIRFLOW__CORE__LOAD_EXAMPLES=False -
 ```
 
 
-## 0.2. ФС
+## 0.2. БД
+
+### Коннект
+
+```bash
+psql postgresql://jovyan:jovyan@127.0.0.1:15432/de
+```
+
+### Backup
+
+Это чтобы не перезапускать создание контейнера из образа, если надо просто восстановить "голую" БД.
+
+```
+!!! Не надо под Убунтой ставить DBeaver из snap-а !!!
+Оно из своей песочницы не получит доступ к /usr/bin/pg_dump
+```
+
+- В DBeaver выставить Local Client Home Dir в `/usr/bin`
+- Правой кнопкой на бд de -> Tools -> Backup -> отметили все таблицы в схемах staging и mart -> Format 'Plain' -> File name 'dump-de-init-mart-n-staging.sql'.
+- скопировать dump-de-init-mart-n-staging.sql в директорию migrations проекта.
+
+### Сразу сделаем миграцию схемы для таблицы staging.user_order_log
+
+```sql
+...
+```
+
+## 0.3. Airflow
+
+### Заходим в UI Airflow
+
+```
+http://localhost:3000/airflow/
+
+- AirflowAdmin
+- airflow_pass
+```
+
+### Заводим переменные (Variable)
+
+- `etl_task_id`
+- `etl_report_id`
+- `etl_backfill_end_date`
+
+Далее можно их экспортнуть: http://localhost:3000/airflow/variable/list/ -> Actions -> Export.
+
+Файл `variables.json` копируем в src-директорию проекта.
+
+
+### Заводим Connections
+
+- `create_files_api` (http)
+    - Host: `https://d5dg1j9kt695d30blp03.apigw.yandexcloud.net`
+    - X-Api_Key и т.п. жёстко пишем в питоновском коде DAG-а
+
+- `pg_connection` (postgres)
+    - Host: `localhost`
+    - Schema: `de`
+
+    ```
+    (In Airflow a schema refers to the database name to which a connection is being made.)
+    ```
+
+    - Login: `jovyan`
+    - Password: `jovyan`
+    - Port: `5432`
+
+- `s3_conn` - НЕ заводим, в первой версии ТЗ было недоварено с ним. Можно было бы использовать и коннект, запихав в Extra json с aws_access_key_id и aws_secret_access_key, но это несекьюрно, а как секьюрно - узнаем позже. На данный момент коннект к s3 определяем в питонячем коде в DAG-е.
+
+
+Экспорта коннектов в файл через UI нет.
+
+
+## 0.4. ФС
 
 ### Заходим в контейнер
 
@@ -38,6 +111,21 @@ bbc29f68b8bd   sindb/project-sprint-3:latest ...
 $ sudo docker exec -it bbc29f68b8bd bash
 root@bbc29f68b8bd:/agent# pwd
 /agent
+```
+
+### удаляем DAG-рыбу
+
+В контейнере DAG-и настроены браться из /lessons/dags
+
+```bash
+root@bbc29f68b8bd:/lessons/# airflow config get-value core dags_folder
+
+/lessons/dags
+```
+
+```bash
+root@bbc29f68b8bd:/agent# rm /lessons/dags/sprint3.py
+root@bbc29f68b8bd:/agent# 
 ```
 
 ### создать директории в контейнере
@@ -58,57 +146,19 @@ root@bbc29f68b8bd:/agent#
 sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/migrations bbc29f68b8bd:/
 ```
 
-## копируем DAG-файл в директорию дял даг-ов Айрфлоу
+### копируем DAG-файл в директорию для DAG-ов Айрфлоу
 
 - сначала первый,
-- после его отработки - правим (`start_date`) второй и только тогда его
-
-## 0.3. БД
-
-### Коннект
 
 ```bash
-psql postgresql://jovyan:jovyan@127.0.0.1:15432/de
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_backfilling.py bbc29f68b8bd:/lessons/dags/
 ```
 
-### Сразу сделаем миграцию схемы для таблицы staging.user_order_log
+- после его отработки - правим (`start_date`) второй и только тогда его
 
-```sql
-...
+```bash
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py bbc29f68b8bd:/lessons/dags/
 ```
-
-## 0.4. Airflow
-
-### Заходим в UI Airflow
-
-```
-http://localhost:3000/airflow/
-
-- AirflowAdmin
-- airflow_pass
-```
-
-### Заводим переменные (Variable)
-
-- `etl_task_id`
-- `etl_report_id`
-- `etl_backfill_end_date`
-
-### Заводим Connections
-
-- `create_files_api` (http)
-    - Host: `https://d5dg1j9kt695d30blp03.apigw.yandexcloud.net`
-- `pg_connection` (postgres)
-    - Host: `localhost`
-    - Schema: `de`
-
-    ```
-    (In Airflow a schema refers to the database name to which a connection is being made.)
-    ```
-
-    - Login: `jovyan`
-    - Password: `jovyan`
-    - Port: `5432`
 
 
 # Приложение А. Backfilling по первоначальному (неудачному) ТЗ и контейнеру на Проект. Сам себе на память оставил (он вполне рабочий на той версии образа).

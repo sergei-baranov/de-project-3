@@ -183,7 +183,7 @@ def pg_execute_query(query, conn_obj):
 
 
 with DAG(
-        'etl_backfilling',
+        'etl_backfilling_old',
         default_args={
             'owner': 'student',
             'email': ['student@example.com'],
@@ -286,7 +286,7 @@ with DAG(
     # )
     migrations_path = '/migrations/'
 
-    with open(migrations_path + '/backfill_mart_truncate.sql') as file:
+    with open(migrations_path + '/backfill_mart_truncate_old.sql') as file:
         truncate_mart_sql_query = file.read()
     truncate_mart = PythonOperator(
         task_id='truncate_mart',
@@ -297,7 +297,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_dimensions.sql') as file:
+    with open(migrations_path + '/backfill_mart_dimensions_old.sql') as file:
         dim_upd_sql_query = file.read()
     update_dimensions = PythonOperator(
         task_id='update_dimensions',
@@ -308,7 +308,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_facts.sql') as file:
+    with open(migrations_path + '/backfill_mart_facts_old.sql') as file:
         facts_upd_sql_query = file.read()
     update_facts = PythonOperator(
         task_id='update_facts',
