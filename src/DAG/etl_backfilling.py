@@ -97,8 +97,6 @@ def get_report_request(conn_name):
         raise ValueError('task end_date is None')
     Variable.set(key='etl_backfill_end_date', value=end_date)
 
-    
-
 
 def get_files_from_s3(business_dt):
     """
@@ -200,7 +198,7 @@ with DAG(
             'retries': 1,
             'retry_delay': timedelta(minutes=5)
         },
-        description='Move user data from files on S3 to Postgres',
+        description='Backfill S3 to Postgres',
         schedule_interval='@once',
         catchup=False,
         start_date=datetime.today() - timedelta(days=9),

@@ -1,5 +1,6 @@
 {
     "etl_backfill_end_date": "",
+    "etl_increment_id": "",
     "etl_report_id": "",
     "etl_task_id": ""
 }

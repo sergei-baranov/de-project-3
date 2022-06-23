@@ -1,17 +1,37 @@
-import os
 import sys
+import requests
 
-dir_path = os.path.dirname(os.path.abspath(__file__))
-migrations_path = os.path.dirname(
-    dir_path + '/../../migrations/'
+req_host = 'https://d5dg1j9kt695d30blp03.apigw.yandexcloud.net/'
+report_id = 'TWpBeU1pMHdOaTB5TWxRd01Eb3hOem95TkFselpYSm5aV2xmWW1GeVlXNXZkZz09'
+nickname = "sergei_baranov"
+cohort = "1"
+business_dt = '2022-06-15 00:00:00'
+business_dt = business_dt.strip().replace(' ', 'T')
+resp = requests.get(
+    f"{req_host}/get_increment?report_id={report_id}&date={business_dt}",
+    headers={
+        "X-Nickname": nickname,
+        "X-Cohort": cohort,
+        "X-API-KEY": "5f55e6c0-e9e5-4a9c-b313-63c01fc31460",
+        "X-Project": 'True'
+    }
 )
 
-with open(migrations_path + '/backfill_mart_truncate.sql') as file:
-    truncate_mart_sql_query = file.read()
-
-print(truncate_mart_sql_query)
+print(resp.content)
 
 sys.exit()
+
+# dir_path = os.path.dirname(os.path.abspath(__file__))
+# migrations_path = os.path.dirname(
+#     dir_path + '/../../migrations/'
+# )
+
+# with open(migrations_path + '/backfill_mart_truncate.sql') as file:
+#     truncate_mart_sql_query = file.read()
+
+# print(truncate_mart_sql_query)
+
+# sys.exit()
 
 # import json
 # import requests

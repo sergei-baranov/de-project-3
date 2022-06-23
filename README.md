@@ -11,9 +11,27 @@
 
 Task-и первого DAG-а сохраняют `report_id` в Variable `etl_report_id`, а `end_date` - в Variable `etl_backfill_end_date`.
 
-Второму DAG-у выставляем `start_date` в то, что видим в Variable `etl_backfill_date_end` (или в datetime.today() - timedelta(days=8)),
-а `end_date` в эту дату + 7 (или datetime.today() - timedelta(days=1)).
+С датой старта второго DAG-а поступаю так:
+Дата в etl_backfill_end_date - это поледняя дата уже имеющихся в backfill-е данных, добавляю к ней два дня.
 Ему же `schedule_interval` выставляем в `'@daily'`, и `catchup` в `True`.
+
+```python
+# вот это дата, за которую были последние данные в backfill
+# '2022-06-14 00:00:00'
+date_time_str = Variable.get('etl_backfill_end_date')
+dt_start_obj = datetime.strptime(date_time_str + ' +0300', '%Y-%m-%d %H:%M:%S %z')
+# добавим два дня
+dt_start_obj2 = dt_start_obj + timedelta(days=2)
+# a вот это - завтра
+end_date_obj = datetime.today() + timedelta(days=1)
+```
+
+Так же таскам второго DAG-а прописываю
+
+```python
+            'depends_on_past': True,
+            'wait_for_downstream': True
+```
 
 # Этап 0. Backfilling.
 
@@ -160,6 +178,76 @@ sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовк
 sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py bbc29f68b8bd:/lessons/dags/
 ```
 
+
+# Этап 1. Increment. Учесть status (при refunded в факты едут отрицательные значения)
+
+1. В Airflow создаём переменную `etl_increment_id`.
+В неё DAG для инкрементов будет класть `increment_id` из ответа операции `/get_increment`
+
+Сохраняемся в variables.json, в файле вычищаем значения до пустых строк.
+
+2. В DAG `etl_increment.py` прописываем в `start_date` значение из переменной `etl_backfill_end_date` (от DAG-а `etl_backfilling.py`) плюс два дня
+
+```python
+# вот это дата, за которую были последние данные в backfill
+# '2022-06-14 00:00:00'
+date_time_str = Variable.get('etl_backfill_end_date')
+dt_start_obj = datetime.strptime(date_time_str + ' +0300', '%Y-%m-%d %H:%M:%S %z')
+# добавим два дня
+dt_start_obj2 = dt_start_obj + timedelta(days=2)
+# a вот это - завтра
+end_date_obj = datetime.today() + timedelta(days=1)
+...
+        description='Increment S3 to Postgres',
+        schedule_interval='@daily',
+        catchup=True,
+        start_date='dt_start_obj2,
+        end_date=end_date_obj,
+```
+
+3. Так же таскам второго DAG-а прописываю (в default_args DAG-а)
+
+```python
+            'depends_on_past': True,
+            'wait_for_downstream': True
+```
+
+4. Сделаем миграцию схемы, раз уж мы заранее знаем, что быдет приходить status теперь.
+Делаю это руками.
+
+Добавляю два вычисляемых поля, чтобы проще был сиквел для проброса в факты.
+
+```sql
+ALTER TABLE staging.user_order_log
+ADD COLUMN "status" varchar(20) default 'shipped';
+
+ALTER TABLE staging.user_order_log
+ADD COLUMN quantity_signed bigint GENERATED ALWAYS AS
+(CASE WHEN "status" = 'refunded' THEN quantity * -1 ELSE quantity END)
+STORED;
+
+ALTER TABLE staging.user_order_log
+ADD COLUMN payment_amount_signed numeric(10,2) GENERATED ALWAYS AS
+(CASE WHEN "status" = 'refunded' THEN payment_amount * -1 ELSE payment_amount END)
+STORED;
+```
+
+см. тж. migrations/migrate_user_order_log.sql
+
+5. копируем DAG в контейнер
+
+```bash
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py bbc29f68b8bd:/lessons/dags/
+```
+
+6. Включаем - работает
+
+7. **Примечание**: В таску load_user_order_log (и соотв. функцию load_file_to_pg)
+я включил так же и переброс даннных в измерения и факты.
+
+Это сделано по причине того, что я использую одну и ту же таблицу в стейджинг-схеме, без поля-идентификатора типа batch_id для разных запусков дага, и поэтому хочу, чтобы таска load_user_order_log отрабатывала при catchup-е последовательно из одной и той же таблицы при разных запусках инкрементного DAG-а.
+
+По идее можно вынести эти таски отдельно, и заливку измерений даже распараллелить, но тогда надо что-то хитрое придумать, типа сенсора отработки предыдущего запуска DAG-а, а не только depends_on_past и wait_for_downstream для тасков, а мы этого ещё не проходили как бы.
 
 # Приложение А. Backfilling по первоначальному (неудачному) ТЗ и контейнеру на Проект. Сам себе на память оставил (он вполне рабочий на той версии образа).
 
