@@ -65,6 +65,9 @@ def get_increment_request(conn_name, business_dt):
         }
     ).json()
 
+    if "status" not in resp:
+        raise ValueError('response has no status key: ' + resp)
+
     if resp['status'] != 'SUCCESS':
         raise ValueError(
             'task status is not SUCCESS (' + resp['status'] + ') for url [' + url + ']')

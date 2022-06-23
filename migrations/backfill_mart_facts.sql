@@ -22,11 +22,9 @@ SELECT
     CAST(EXTRACT(epoch FROM date_time) AS int4) AS "date_id",
     item_id,
     customer_id,
-    MAX(city_id),
-    SUM(quantity) AS "quantity",
-    SUM(payment_amount) AS "payment_amount"
+    city_id,
+    quantity AS "quantity",
+    payment_amount AS "payment_amount"
 FROM
     staging.user_order_log
-GROUP BY
-    date_time, item_id, customer_id
 ;
