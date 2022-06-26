@@ -25,7 +25,7 @@ def addapt_numpy_int64(numpy_int64):
 register_adapter(numpy.float64, addapt_numpy_float64)
 register_adapter(numpy.int64, addapt_numpy_int64)
 
-pg_conn = BaseHook.get_connection('pg_connection')
+pg_conn = BaseHook.get_connection('postgresql_de')
 
 
 def create_files_request(conn_name, business_dt):
@@ -206,7 +206,7 @@ with DAG(
         task_id='set_gen_report_task',
         python_callable=create_files_request,
         op_kwargs={
-            'conn_name': 'create_files_api',
+            'conn_name': 'http_conn_id',
             'business_dt': dag.params['business_dt']
         },
         dag=dag)
@@ -220,7 +220,7 @@ with DAG(
         task_id='get_report_task',
         python_callable=get_report_request,
         op_kwargs={
-            'conn_name': 'create_files_api'
+            'conn_name': 'http_conn_id'
         },
         dag=dag)
 
@@ -281,12 +281,12 @@ with DAG(
     #     dag=dag)
 
     # dir_path = os.path.dirname(os.path.abspath(__file__))
-    # migrations_path = os.path.dirname(
+    # sql_path = os.path.dirname(
     #     dir_path + '/../../migrations/'
     # )
-    migrations_path = '/migrations/'
+    sql_path = '/lessons/dags/sql'
 
-    with open(migrations_path + '/backfill_mart_truncate_old.sql') as file:
+    with open(sql_path + '/backfill_mart_truncate_old.sql') as file:
         truncate_mart_sql_query = file.read()
     truncate_mart = PythonOperator(
         task_id='truncate_mart',
@@ -297,7 +297,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_dimensions_old.sql') as file:
+    with open(sql_path + '/backfill_mart_dimensions_old.sql') as file:
         dim_upd_sql_query = file.read()
     update_dimensions = PythonOperator(
         task_id='update_dimensions',
@@ -308,7 +308,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_facts_old.sql') as file:
+    with open(sql_path + '/backfill_mart_facts_old.sql') as file:
         facts_upd_sql_query = file.read()
     update_facts = PythonOperator(
         task_id='update_facts',

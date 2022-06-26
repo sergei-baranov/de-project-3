@@ -24,7 +24,7 @@ def addapt_numpy_int64(numpy_int64):
 register_adapter(numpy.float64, addapt_numpy_float64)
 register_adapter(numpy.int64, addapt_numpy_int64)
 
-pg_conn = BaseHook.get_connection('pg_connection')
+pg_conn = BaseHook.get_connection('postgresql_de')
 
 def get_increment_request(conn_name, business_dt):
     """
@@ -182,25 +182,25 @@ def load_file_to_pg(business_dt, filebase, pg_table, conn_obj):
     conn.close()
 
     if pg_table == 'staging.user_order_log':
-        migrations_path = '/migrations/'
+        sql_path = '/lessons/dags/sql'
 
-        with open(migrations_path + '/increment_mart_d_item.sql') as file:
+        with open(sql_path + '/increment_mart_d_item.sql') as file:
             sql_query = file.read()
             pg_execute_query(query=sql_query, conn_obj=conn_obj)
 
-        with open(migrations_path + '/increment_mart_d_customer.sql') as file:
+        with open(sql_path + '/increment_mart_d_customer.sql') as file:
             sql_query = file.read()
             pg_execute_query(query=sql_query, conn_obj=conn_obj)
 
-        with open(migrations_path + '/increment_mart_d_city.sql') as file:
+        with open(sql_path + '/increment_mart_d_city.sql') as file:
             sql_query = file.read()
             pg_execute_query(query=sql_query, conn_obj=conn_obj)
 
-        with open(migrations_path + '/increment_mart_d_calendar.sql') as file:
+        with open(sql_path + '/increment_mart_d_calendar.sql') as file:
             sql_query = file.read()
             pg_execute_query(query=sql_query, conn_obj=conn_obj)
 
-        with open(migrations_path + '/increment_mart_f_sales.sql') as file:
+        with open(sql_path + '/increment_mart_f_sales.sql') as file:
             sql_query = file.read()
             pg_execute_query(query=sql_query, conn_obj=conn_obj)
 
@@ -241,7 +241,7 @@ with DAG(
         task_id='get_increment_task',
         python_callable=get_increment_request,
         op_kwargs={
-            'conn_name': 'create_files_api',
+            'conn_name': 'http_conn_id',
             'business_dt': dag.params['business_dt']
         },
         dag=dag)

@@ -24,7 +24,17 @@ def addapt_numpy_int64(numpy_int64):
 register_adapter(numpy.float64, addapt_numpy_float64)
 register_adapter(numpy.int64, addapt_numpy_int64)
 
-pg_conn = BaseHook.get_connection('pg_connection')
+pg_conn = BaseHook.get_connection('postgresql_de')
+
+def create_init_vars():
+    """
+    эти переменные понядобятся далее для связи между
+    тасками и даг-ами
+    """
+    Variable.set("etl_task_id", "");
+    Variable.set("etl_report_id", "");
+    Variable.set("etl_backfill_end_date", "");
+    Variable.set("etl_increment_id", "");
 
 def create_files_request(conn_name, business_dt):
     """
@@ -208,11 +218,51 @@ with DAG(
         # https://airflow.apache.org/docs/apache-airflow/stable/templates-ref.html
         params={'business_dt': '{{ ds }}'}
 ) as dag:
+    sql_path = '/lessons/dags/sql'
+
+    with open(sql_path + '/init.sql') as file:
+        init_query = file.read()
+    init_db_task = PythonOperator(
+        task_id='init_db_task',
+        python_callable=pg_execute_query,
+        op_kwargs={
+            'query': init_query,
+            'conn_obj': pg_conn
+        },
+        dag=dag)
+
+    init_vars_task = PythonOperator(
+        task_id='init_vars_task',
+        python_callable=create_init_vars,
+        dag=dag)
+
+    with open(sql_path + '/migrate_user_order_log.sql') as file:
+        migrate_user_order_log_query = file.read()
+    migrate_order_log_task = PythonOperator(
+        task_id='migrate_order_log_task',
+        python_callable=pg_execute_query,
+        op_kwargs={
+            'query': migrate_user_order_log_query,
+            'conn_obj': pg_conn
+        },
+        dag=dag)
+
+    with open(sql_path + '/mart_f_customer_retention.sql') as file:
+        f_customer_retention_query = file.read()
+    create_view_task = PythonOperator(
+        task_id='create_view_task',
+        python_callable=pg_execute_query,
+        op_kwargs={
+            'query': f_customer_retention_query,
+            'conn_obj': pg_conn
+        },
+        dag=dag)
+
     set_gen_report_task = PythonOperator(
         task_id='set_gen_report_task',
         python_callable=create_files_request,
         op_kwargs={
-            'conn_name': 'create_files_api',
+            'conn_name': 'http_conn_id',
             'business_dt': dag.params['business_dt']
         },
         dag=dag)
@@ -226,7 +276,7 @@ with DAG(
         task_id='get_report_task',
         python_callable=get_report_request,
         op_kwargs={
-            'conn_name': 'create_files_api'
+            'conn_name': 'http_conn_id'
         },
         dag=dag)
 
@@ -249,9 +299,7 @@ with DAG(
         },
         dag=dag)
 
-    migrations_path = '/migrations/'
-
-    with open(migrations_path + '/backfill_mart_truncate.sql') as file:
+    with open(sql_path + '/backfill_mart_truncate.sql') as file:
         truncate_mart_sql_query = file.read()
     truncate_mart = PythonOperator(
         task_id='truncate_mart',
@@ -262,7 +310,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_dimensions.sql') as file:
+    with open(sql_path + '/backfill_mart_dimensions.sql') as file:
         dim_upd_sql_query = file.read()
     update_dimensions = PythonOperator(
         task_id='update_dimensions',
@@ -273,7 +321,7 @@ with DAG(
         },
         dag=dag)
 
-    with open(migrations_path + '/backfill_mart_facts.sql') as file:
+    with open(sql_path + '/backfill_mart_facts.sql') as file:
         facts_upd_sql_query = file.read()
     update_facts = PythonOperator(
         task_id='update_facts',
@@ -285,7 +333,13 @@ with DAG(
         dag=dag)
 
     (
-        set_gen_report_task
+        [
+            init_db_task,
+            init_vars_task
+        ]
+        >> migrate_order_log_task
+        >> create_view_task
+        >> set_gen_report_task
         >> delay_task
         >> get_report_task
         >> get_files_task

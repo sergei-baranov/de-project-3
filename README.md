@@ -50,24 +50,7 @@ docker run -d -p 3000:3000 -p 15432:5432 -e AIRFLOW__CORE__LOAD_EXAMPLES=False -
 psql postgresql://jovyan:jovyan@127.0.0.1:15432/de
 ```
 
-### Backup
-
-Это чтобы не перезапускать создание контейнера из образа, если надо просто восстановить "голую" БД.
-
-```
-!!! Не надо под Убунтой ставить DBeaver из snap-а !!!
-Оно из своей песочницы не получит доступ к /usr/bin/pg_dump
-```
-
-- В DBeaver выставить Local Client Home Dir в `/usr/bin`
-- Правой кнопкой на бд de -> Tools -> Backup -> отметили все таблицы в схемах staging и mart -> Format 'Plain' -> File name 'dump-de-init-mart-n-staging.sql'.
-- скопировать dump-de-init-mart-n-staging.sql в директорию migrations проекта.
-
-### Сразу сделаем миграцию схемы для таблицы staging.user_order_log
-
-```sql
-...
-```
+Ничего не делаем, все миграции в init-таске перевого DAG-а.
 
 ## 0.3. Airflow
 
@@ -80,24 +63,22 @@ http://localhost:3000/airflow/
 - airflow_pass
 ```
 
-### Заводим переменные (Variable)
+### Переменные (Variable)
+
+Следующие переменные создадутся в init-таске первого DAG-а:
 
 - `etl_task_id`
 - `etl_report_id`
 - `etl_backfill_end_date`
+- `etl_increment_id`
 
-Далее можно их экспортнуть: http://localhost:3000/airflow/variable/list/ -> Actions -> Export.
+### Исполюзуем следующие Connections (в контейнере Проекта они уже есть)
 
-Файл `variables.json` копируем в src-директорию проекта.
-
-
-### Заводим Connections
-
-- `create_files_api` (http)
+- `http_conn_id` (http)
     - Host: `https://d5dg1j9kt695d30blp03.apigw.yandexcloud.net`
     - X-Api_Key и т.п. жёстко пишем в питоновском коде DAG-а
 
-- `pg_connection` (postgres)
+- `pg_connection` (postgres) - postgresql_de
     - Host: `localhost`
     - Schema: `de`
 
@@ -112,9 +93,6 @@ http://localhost:3000/airflow/
 - `s3_conn` - НЕ заводим, в первой версии ТЗ было недоварено с ним. Можно было бы использовать и коннект, запихав в Extra json с aws_access_key_id и aws_secret_access_key, но это несекьюрно, а как секьюрно - узнаем позже. На данный момент коннект к s3 определяем в питонячем коде в DAG-е.
 
 
-Экспорта коннектов в файл через UI нет.
-
-
 ## 0.4. ФС
 
 ### Заходим в контейнер
@@ -124,10 +102,10 @@ sudo docker ps -a
 
 $ sudo docker ps -a
 CONTAINER ID IMAGE ...
-bbc29f68b8bd   sindb/project-sprint-3:latest ...
+4007e5e134b4   sindb/project-sprint-3:latest ...
 
-$ sudo docker exec -it bbc29f68b8bd bash
-root@bbc29f68b8bd:/agent# pwd
+$ sudo docker exec -it 4007e5e134b4 bash
+root@4007e5e134b4:/agent# pwd
 /agent
 ```
 
@@ -136,55 +114,60 @@ root@bbc29f68b8bd:/agent# pwd
 В контейнере DAG-и настроены браться из /lessons/dags
 
 ```bash
-root@bbc29f68b8bd:/lessons/# airflow config get-value core dags_folder
+root@4007e5e134b4:/lessons/# airflow config get-value core dags_folder
 
 /lessons/dags
 ```
 
 ```bash
-root@bbc29f68b8bd:/agent# rm /lessons/dags/sprint3.py
-root@bbc29f68b8bd:/agent# 
+root@4007e5e134b4:/agent# rm /lessons/dags/sprint3.py
+root@4007e5e134b4:/agent# 
 ```
 
 ### создать директории в контейнере
 
 - `/file_staging`
-- `/migrations`
 
 ```bash
-root@bbc29f68b8bd:/agent# mkdir /file_staging
-root@bbc29f68b8bd:/agent# mkdir /migrations
-root@bbc29f68b8bd:/agent#
+root@4007e5e134b4:/agent# mkdir /file_staging
+root@4007e5e134b4:/agent#
 ```
 
-### в `/migrations` копируем sql из соотв. папки проекта
+### в `/lessons/dags/sql` копируем sql из соотв. папки проекта
+(/src/DAG/sql/)
 
 ```bash
-# например в контейнер bbc29f68b8bd может быть так:
-sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/migrations bbc29f68b8bd:/
+# например в контейнер 4007e5e134b4 может быть так:
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/sql 4007e5e134b4:/lessons/dags
 ```
 
 ### копируем DAG-файл в директорию для DAG-ов Айрфлоу
 
-- сначала первый,
+- первый
 
 ```bash
-sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_backfilling.py bbc29f68b8bd:/lessons/dags/
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_backfilling.py 4007e5e134b4:/lessons/dags/
 ```
 
-- после его отработки - правим (`start_date`) второй и только тогда его
+- второй - после отработки первого (ему для определения нужна переменная, заполненная по отработке первого)
 
 ```bash
-sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py bbc29f68b8bd:/lessons/dags/
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py 4007e5e134b4:/lessons/dags/
 ```
+
+## Запускаем первый DAG
+
+- Он пересоздаст БД,
+- сделает миграцию staging.user_order_log,
+- создаст view-ху mart.f_customer_retention,
+- создаст переменные в Airflow,
+- осуществит загрузку инициализирующих данных
 
 
 # Этап 1. Increment. Учесть status (при refunded в факты едут отрицательные значения)
 
-1. В Airflow создаём переменную `etl_increment_id`.
+1. В Airflow создана первым DAG-ом переменная `etl_increment_id`.
 В неё DAG для инкрементов будет класть `increment_id` из ответа операции `/get_increment`
-
-Сохраняемся в variables.json, в файле вычищаем значения до пустых строк.
 
 2. В DAG `etl_increment.py` прописываем в `start_date` значение из переменной `etl_backfill_end_date` (от DAG-а `etl_backfilling.py`) плюс два дня
 
@@ -212,10 +195,9 @@ end_date_obj = datetime.today() + timedelta(days=1)
             'wait_for_downstream': True
 ```
 
-4. Сделаем миграцию схемы, раз уж мы заранее знаем, что быдет приходить status теперь.
-Делаю это руками.
+4. Миграция схемы, раз уж мы заранее знаем, что будет приходить status теперь, сделана в init-task-е 1-го DAG-а.
 
-Добавляю два вычисляемых поля, чтобы проще был сиквел для проброса в факты.
+Добавлены два вычисляемых поля, чтобы проще был сиквел для проброса в факты.
 
 ```sql
 ALTER TABLE staging.user_order_log
@@ -237,7 +219,7 @@ STORED;
 5. копируем DAG в контейнер
 
 ```bash
-sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py bbc29f68b8bd:/lessons/dags/
+sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовки_данных/de-project-3/src/DAG/etl_increment.py 4007e5e134b4:/lessons/dags/
 ```
 
 6. Включаем - работает
@@ -250,6 +232,8 @@ sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовк
 По идее можно вынести эти таски отдельно, и заливку измерений даже распараллелить, но тогда надо что-то хитрое придумать, типа сенсора отработки предыдущего запуска DAG-а, а не только depends_on_past и wait_for_downstream для тасков, а мы этого ещё не проходили как бы.
 
 # Этап 2. Витрина f_customer_retention
+
+Создана заранее в init-task-е 1-го DAG-а.
 
 /migrations/mart_f_customer_retention.sql
 
@@ -335,6 +319,11 @@ ORDER BY
 
 Работает, у меня предусмотрены удаления перед вставками.
 
+---
+---
+---
+---
+---
 ---
 ---
 ---
@@ -449,6 +438,19 @@ ALTER TABLE mart.d_item ALTER COLUMN category_id DROP NOT NULL;
 
    - `/src/DAG/_etl_backfilling_old.py` (в контейнере - в `/lessons/dags/etl_backfilling_old.py`)
 
+### Приложение B. Backup, сам себе на память.
+
+
+```
+!!! Не надо под Убунтой ставить DBeaver из snap-а !!!
+Оно из своей песочницы не получит доступ к /usr/bin/pg_dump
+```
+
+- В DBeaver выставить Local Client Home Dir в `/usr/bin`
+- Правой кнопкой на бд de -> Tools -> Backup -> отметили все таблицы в схемах staging и mart -> Format 'Plain' -> File name 'dump-de-init-mart-n-staging.sql'.
+- скопировать dump-de-init-mart-n-staging.sql в директорию migrations проекта.
+
+## Исходный readme:
 
 ### Описание
 Репозиторий предназначен для сдачи проекта №3. 
