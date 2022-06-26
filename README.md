@@ -214,7 +214,7 @@ ADD COLUMN payment_amount_signed numeric(10,2) GENERATED ALWAYS AS
 STORED;
 ```
 
-см. тж. migrations/migrate_user_order_log.sql
+см. тж. src/DAG/sql/migrate_user_order_log.sql
 
 5. копируем DAG в контейнер
 
@@ -235,7 +235,7 @@ sudo docker cp ~/YA_DE/SPRINT4_ETL_автоматизация_подготовк
 
 Создана заранее в init-task-е 1-го DAG-а.
 
-/migrations/mart_f_customer_retention.sql
+src/DAG/sql/mart_f_customer_retention.sql
 
 ```sql
 CREATE OR REPLACE VIEW mart.f_customer_retention AS
@@ -377,7 +377,7 @@ ALTER TABLE mart.d_item ALTER COLUMN category_id DROP NOT NULL;
 ----
 
 Далее например в DBeawer делаем **бэкап пустой структуры**: правой кнопкой по бд `de` -> Tools -> Backup -> отмечаем схемы `staging` и `mart` -> формат `plain` -> сохраняем в файл
-- `migrations/dump-de-init-mart-n-staging.sql`.
+- `src/DAG/sql/dump-de-init-mart-n-staging.sql`.
 
 Далее будем восстанавливаться отсюда на фазе `backfilling`.
 
